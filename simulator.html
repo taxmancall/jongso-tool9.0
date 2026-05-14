@@ -156,7 +156,7 @@ input:focus,select:focus{outline:none;border-color:#185FA5;}
 <div class="container">
 <a class="back" href="index.html">← 인덱스로 돌아가기</a>
 <h1>🧮 종합소득세 신고대리 가결산 시뮬레이터</h1>
-<p class="sub">2025년 귀속 종합소득세 · 간편(기준)/간편(단순)/기장 3가지 비교 <span style="color:#185FA5;font-weight:600;">v31</span> <span style="font-size:11px;color:#888;">(업종별 평균소득률 표시 — 국세청 종소세 자료)</span></p>
+<p class="sub">2025년 귀속 종합소득세 · 간편(기준)/간편(단순)/기장 3가지 비교 <span style="color:#185FA5;font-weight:600;">v32</span> <span style="font-size:11px;color:#888;">(직접 입력 시에도 평균소득률 표시)</span></p>
 
 <!-- 이름 입력 -->
 <!-- ========== 입력 영역 (PDF 1번에서만 표시) ========== -->
@@ -224,7 +224,7 @@ input:focus,select:focus{outline:none;border-color:#185FA5;}
       </div>
       <div>
         <label>수입금액 (원)</label>
-        <input type="number" class="inc-amt" placeholder="0">
+        <input type="number" class="inc-amt" placeholder="0" oninput="updateTotalRev()">
       </div>
       <button class="rb" onclick="removeRow(0)" style="margin-top:20px;">✕</button>
     </div>
@@ -233,6 +233,8 @@ input:focus,select:focus{outline:none;border-color:#185FA5;}
   <div style="margin-top:10px;padding:8px 12px;background:#f8f8f6;border-radius:8px;font-size:12px;color:#555;">
     총 수입금액: <strong id="total-rev-display">0원</strong>
   </div>
+  <!-- ★ v32: 직접 입력 시에도 평균소득률 표시 -->
+  <div id="avg-income-rate-direct" style="display:none;margin-top:8px;padding:8px 10px;background:#F0F7FF;border-left:3px solid #185FA5;border-radius:4px;font-size:11px;line-height:1.7;"></div>
 </div>
 
 <!-- ★ v28.4 신규: 무기장가산세 면제 토글 (소법 §81의5②) -->
@@ -973,6 +975,73 @@ function updateTotalRev(){
   const amts = [...document.querySelectorAll('.inc-amt')].map(i=>N(i.value));
   const total = amts.reduce((a,b)=>a+b,0);
   document.getElementById('total-rev-display').textContent = F(total)+'원';
+  // ★ v32: 평균소득률 표시 갱신 (수입금액 최대 업종 기준)
+  updateAvgRateDisplay();
+}
+
+// ★ v32: 수입금액이 가장 높은 업종의 평균소득률을 입력 영역에 표시
+function updateAvgRateDisplay(){
+  const box = document.getElementById('avg-income-rate-direct');
+  if(!box) return;
+  
+  // 각 행의 (업종코드, 수입금액) 수집
+  const rows = document.querySelectorAll('.income-row');
+  const pairs = [];
+  rows.forEach(row => {
+    const codeEl = row.querySelector('[id^="ind-code-"]');
+    const amtEl = row.querySelector('.inc-amt');
+    if(codeEl && amtEl){
+      const code = codeEl.value;
+      const amt = N(amtEl.value);
+      if(code && amt > 0){
+        pairs.push({code, amt});
+      }
+    }
+  });
+  
+  if(pairs.length === 0){
+    box.style.display = 'none';
+    return;
+  }
+  
+  // 가장 큰 수입금액 업종
+  const maxRev = pairs.reduce((a,b)=> b.amt > a.amt ? b : a, pairs[0]);
+  const avg = getAvgIncomeRate(maxRev.code, maxRev.amt);
+  
+  if(!avg.hasData){
+    box.style.display = 'block';
+    box.innerHTML = `<strong style="color:#185FA5;">📊 동종업계 평균소득률</strong> <span style="color:#888;">(국세청 종소세 자료)</span><br>
+      &nbsp;&nbsp;<span style="color:#A32D2D;">⚠️ 업종코드 <strong>${maxRev.code}</strong>에 대한 평균소득률 자료 없음</span>`;
+    return;
+  }
+  
+  const icMax = IC.find(d=>d.c===maxRev.code);
+  const icName = icMax ? icMax.n : '';
+  const b = avg.bucket;
+  const rangeStr = b === 25 ? '0~50백만원' : b === 75 ? '50~100백만원' : b === 150 ? '100~200백만원' :
+                   b === 250 ? '200~300백만원' : b === 400 ? '300~500백만원' : b === 750 ? '500~1000백만원' :
+                   b === 1500 ? '10~20억원' : b === 3500 ? '20~50억원' : b === 7500 ? '50~100억원' : '100억원+';
+  
+  let html = `<strong style="color:#185FA5;">📊 동종업계 평균소득률</strong> <span style="color:#888;">(국세청 종소세 자료)</span><br>`;
+  html += `&nbsp;&nbsp;업종: <strong>${maxRev.code}</strong> ${icName} · 수입 <strong>${F(maxRev.amt)}원</strong>`;
+  if(pairs.length > 1) html += ` <span style="color:#888;">(최대 수입 업종 기준)</span>`;
+  html += `<br>`;
+  html += `&nbsp;&nbsp;<strong style="color:#A32D2D;">평균소득률: ${avg.rate.toFixed(2)}%</strong>`;
+  html += ` <span style="color:#888;">(${avg.year}귀속, ${rangeStr} 구간, n=${avg.samples})</span>`;
+  if(avg.sincerityRate > 0){
+    html += ` <span style="color:#633806;">| 성실신고대상자 평균: <strong>${avg.sincerityRate.toFixed(2)}%</strong></span>`;
+  }
+  html += `<br>`;
+  if(avg.median > 0){
+    html += `&nbsp;&nbsp;전체 메디안: <strong>${avg.median.toFixed(2)}%</strong>`;
+    html += ` <span style="color:#888;">(${avg.medianYear}귀속, 전체 표본 n=${avg.medianSamples})</span>`;
+    if(avg.medianSincerity > 0){
+      html += ` <span style="color:#633806;">| 성실 메디안: <strong>${avg.medianSincerity.toFixed(2)}%</strong></span>`;
+    }
+  }
+  
+  box.style.display = 'block';
+  box.innerHTML = html;
 }
 
 // ===== 근로소득 (다중 근무지) =====

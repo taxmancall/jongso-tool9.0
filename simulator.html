@@ -156,7 +156,7 @@ input:focus,select:focus{outline:none;border-color:#185FA5;}
 <div class="container">
 <a class="back" href="index.html">← 인덱스로 돌아가기</a>
 <h1>🧮 종합소득세 신고대리 가결산 시뮬레이터</h1>
-<p class="sub">2025년 귀속 종합소득세 · 간편(기준)/간편(단순)/기장 3가지 비교 <span style="color:#185FA5;font-weight:600;">v32</span> <span style="font-size:11px;color:#888;">(직접 입력 시에도 평균소득률 표시)</span></p>
+<p class="sub">2025년 귀속 종합소득세 · 간편(기준)/간편(단순)/기장 3가지 비교 <span style="color:#185FA5;font-weight:600;">v33</span> <span style="font-size:11px;color:#888;">(소득률 슬라이더 + 직접 입력 · 소수점 둘째자리)</span></p>
 
 <!-- 이름 입력 -->
 <!-- ========== 입력 영역 (PDF 1번에서만 표시) ========== -->
@@ -596,10 +596,11 @@ input:focus,select:focus{outline:none;border-color:#185FA5;}
   <div class="card-title">📒 장부신고 소득률 설정</div>
   <div class="slider-wrap">
     <span style="font-size:12px;color:#888;">소득률</span>
-    <input type="range" id="rsl" min="1" max="80" value="15" step="1" oninput="document.getElementById('rdsp').textContent=this.value+'%'">
-    <span class="slider-val" id="rdsp">15%</span>
+    <input type="range" id="rsl" min="0.01" max="100" value="15" step="0.01" oninput="syncRateFromSlider()">
+    <input type="number" id="rsl-num" min="0.01" max="100" step="0.01" value="15" style="width:90px;text-align:right;font-weight:700;color:#185FA5;padding:6px 8px;border:1px solid #d8d4c4;border-radius:6px;" oninput="syncRateFromNumber()">
+    <span style="font-size:12px;color:#185FA5;font-weight:700;">%</span>
   </div>
-  <p style="font-size:11px;color:#888;margin-top:6px;">기장 신고대리 시 소득금액 = 수입금액 × 소득률</p>
+  <p style="font-size:11px;color:#888;margin-top:6px;">기장 신고대리 시 소득금액 = 수입금액 × 소득률 <span style="color:#185FA5;">(소수점 둘째자리까지 입력 가능 · 예: 10.25%)</span></p>
 
   <!-- ★ v29 신규: 현재 확인 지출액 입력 -->
   <div style="margin-top:14px;padding-top:14px;border-top:1px dashed #e8e6df;">
@@ -1042,6 +1043,25 @@ function updateAvgRateDisplay(){
   
   box.style.display = 'block';
   box.innerHTML = html;
+}
+
+// ★ v33: 소득률 슬라이더 ↔ 입력박스 양방향 동기화
+function syncRateFromSlider(){
+  const sl = document.getElementById('rsl');
+  const num = document.getElementById('rsl-num');
+  if(!sl || !num) return;
+  num.value = parseFloat(sl.value).toFixed(2);
+}
+
+function syncRateFromNumber(){
+  const sl = document.getElementById('rsl');
+  const num = document.getElementById('rsl-num');
+  if(!sl || !num) return;
+  let v = parseFloat(num.value);
+  if(isNaN(v)) return;
+  if(v < 0.01) v = 0.01;
+  if(v > 100) v = 100;
+  sl.value = v;
 }
 
 // ===== 근로소득 (다중 근무지) =====
@@ -1691,11 +1711,13 @@ function applyParsed(){
   if(parsedData.nokran) document.getElementById('nk').value = parsedData.nokran;
   if(parsedData.withhold) document.getElementById('wh').value = parsedData.withhold;
   if(parsedData.prepaid) document.getElementById('pp').value = parsedData.prepaid;
-  // ★ 신규: 직전년도 소득률 → 장부 슬라이더 자동 반영
+  // ★ 신규: 직전년도 소득률 → 장부 슬라이더 자동 반영 (v33: 소수점 정밀 반영)
   if(parsedData.prevIncomeRate){
     const sl = document.getElementById('rsl');
-    sl.value = Math.round(parsedData.prevIncomeRate);
-    document.getElementById('rdsp').textContent = sl.value + '%';
+    const num = document.getElementById('rsl-num');
+    const v = parseFloat(parsedData.prevIncomeRate);
+    sl.value = v;
+    num.value = v.toFixed(2);
   }
   // ★ 신규: 합산 타소득 자동 선택 (우선순위: 근로 > 연금 > 기타)
   const oi = parsedData.otherIncomes;
@@ -2281,7 +2303,7 @@ function calc(){
   const results = [
     {lbl:'간편 신고대리 (기준경비율)', sub: stdSubLabel, inc:i1, r:r1, disabled:false, warn: isDoubleEntry?`⚠️ 복식부기의무 → 기준경비율 ×1/2 적용 + 무신고/무기장가산세 비교 적용${upperLimitApplied?'<br>📊 소득상한배율 적용 (단순경비율 소득금액의 3.4배 한도)':''}`:(upperLimitApplied?'📊 소득상한배율 적용 (단순경비율 소득금액의 2.8배 한도)':'')},
     {lbl:'간편 신고대리 (단순경비율)', sub:`경비율 ${(avgSimpDisplay*100).toFixed(1)}%${isDoubleEntry?' · 가산세 적용':''}`, inc:i2, r:r2, disabled: !canUseSimpExpense, warn: !canUseSimpExpense ? `❌ 적용 불가 — ${simpDisableReason}` : (isDoubleEntry?'⚠️ 복식부기의무 → 무신고/무기장가산세 비교 적용':'')},
-    {lbl:'기장 신고대리', sub:`소득률 ${(slr*100).toFixed(0)}%${parsedData.prevIncomeRate?' · 직전 '+parsedData.prevIncomeRate+'%':''}`, inc:i3, r:r3, disabled:false, warn:''}
+    {lbl:'기장 신고대리', sub:`소득률 ${(slr*100).toFixed(2)}%${parsedData.prevIncomeRate?' · 직전 '+parsedData.prevIncomeRate+'%':''}`, inc:i3, r:r3, disabled:false, warn:''}
   ];
   
   document.getElementById('cds').innerHTML = results.map(d=>{

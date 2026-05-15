@@ -156,7 +156,7 @@ input:focus,select:focus{outline:none;border-color:#185FA5;}
 <div class="container">
 <a class="back" href="index.html">← 인덱스로 돌아가기</a>
 <h1>🧮 종합소득세 신고대리 가결산 시뮬레이터</h1>
-<p class="sub">2025년 귀속 종합소득세 · 간편(기준)/간편(단순)/기장 3가지 비교 <span style="color:#185FA5;font-weight:600;">v34.1</span> <span style="font-size:11px;color:#888;">(소득률 입력박스 강조 · 소수점 둘째자리)</span></p>
+<p class="sub">2025년 귀속 종합소득세 · 간편(기준)/간편(단순)/기장 3가지 비교 <span style="color:#185FA5;font-weight:600;">v35</span> <span style="font-size:11px;color:#888;">(지방소득세 독립 계산 — 중간예납 제외)</span></p>
 
 <!-- 이름 입력 -->
 <!-- ========== 입력 영역 (PDF 1번에서만 표시) ========== -->
@@ -2415,11 +2415,15 @@ function calc(){
     // ★ 소득세분 납부(환급) = 결정세액 - 기납부 원천징수 - 중간예납 - 근로소득 결정세액
     //   (근로소득 결정세액은 이미 원천징수로 납부된 것이므로 차감 — 소득세법 §76)
     const incomeTaxPay = d.r.det - d.r.wh - d.r.pp - d.r.workTax;
-    // ★ 지방소득세 = 추가 납부할 국세 × 10%
-    //   (근로소득 결정세액에 대한 지방세도 이미 원천징수되었으므로 전체에 10% 적용 X)
-    //   지방세법 §92, §103의3: 종합소득분 개인지방소득세는 종합소득세 결정세액의 10%이나,
-    //   기납부분(원천징수·근로소득결정세액)에 대한 지방세도 이미 납부됨
-    const localPay = Math.round(incomeTaxPay * 0.1);
+    // ★ v35: 지방소득세 독립 계산 (지방세법 §92, §103의3)
+    //   - 지방소득세 = 소득세 결정세액 × 10%
+    //   - 차감: 원천징수 지방세분 + 근로소득 결정세액 × 10%
+    //   - 중간예납은 국세에만 존재 → 지방세 계산에서 제외
+    //   원천징수 시 소득세의 10%만큼 지방세도 이미 원천징수되었음
+    const localDet = Math.round(d.r.det * 0.1);                              // 지방소득세 결정세액
+    const localWh = Math.round(d.r.wh * 0.1);                                // 원천징수 지방세 (소득세 원천징수의 10%)
+    const localWorkTax = Math.round(d.r.workTax * 0.1);                      // 근로소득 결정세액에 대한 지방세 (이미 원천징수)
+    const localPay = localDet - localWh - localWorkTax;                      // 납부할 지방소득세
     // 총 납부(환급) = 소득세분 + 지방소득세
     const totalPay = incomeTaxPay + localPay;
     // ★ v29: 기장 신고대리 카드에만 — 현재 확인 지출액 / 추가 필요 지출액 표시
@@ -2484,7 +2488,7 @@ function calc(){
         <span style="font-weight:600;">납부(환급)할 세액 <span style="font-size:10px;font-weight:400;color:#888;">(소득세)</span></span>
         <span class="${incomeTaxPay>0?'crd':'cgn'}" style="font-weight:600;">${incomeTaxPay>0?'':'-'}${F(Math.abs(incomeTaxPay))}원</span>
       </div>
-      <div class="cr"><span class="cm">지방소득세 <span style="font-size:10px;color:#888;">(소득세 납부분×10%)</span></span><span class="${localPay>=0?'':'cgn'}">${localPay>=0?F(localPay):'-'+F(Math.abs(localPay))}원</span></div>
+      <div class="cr"><span class="cm">지방소득세 <span style="font-size:10px;color:#888;">(결정세액×10% − 원천징수 지방세)</span></span><span class="${localPay>=0?'':'cgn'}">${localPay>=0?F(localPay):'-'+F(Math.abs(localPay))}원</span></div>
       <div class="cr" style="border-top:2px solid #1a1a1a;padding-top:6px;margin-top:3px;">
         <span style="font-weight:700;font-size:13px;">총 납부(환급)</span>
         <span class="${totalPay>0?'crd':'cgn'}" style="font-size:16px;font-weight:700;">${totalPay>0?'':'-'}${F(Math.abs(totalPay))}원</span>
